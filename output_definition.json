@@ -1,0 +1,20 @@
+{
+  "files": {
+    "report": {
+      "filepath": "demux/demux_report.html",
+      "title": "Demultiplexing report",
+      "description": "Reads per sample and why reads were not assigned.",
+      "mime-type": "text/html",
+      "optional": false,
+      "type": "aggregated"
+    },
+    "summary": {
+      "filepath": "demux/demux_summary.tsv",
+      "title": "Summary table",
+      "description": "Reads per sample.",
+      "mime-type": "text/tab-separated-values",
+      "optional": false,
+      "type": "aggregated"
+    }
+  }
+}

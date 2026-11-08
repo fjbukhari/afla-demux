@@ -1,0 +1,191 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema",
+  "type": "object",
+  "properties": {
+    "out_dir": {
+      "type": "string",
+      "format": "directory-path",
+      "default": "output",
+      "hidden": true
+    }
+  },
+  "$id": "afla-demux/nextflow_schema.json",
+  "title": "afla-demux",
+  "workflow_title": "AFLA Demux (Illumina and Nanopore)",
+  "description": "Sorts Illumina or Nanopore FASTQ reads into one set of files per sample using a sample sheet. Education and research use only, not for clinical use.",
+  "url": "",
+  "resources": {
+    "recommended": {
+      "cpus": 8,
+      "memory": "16GB"
+    },
+    "minimum": {
+      "cpus": 2,
+      "memory": "8GB"
+    },
+    "run_time": "Depends on run size; a benchtop run takes minutes.",
+    "arm_support": false
+  },
+  "definitions": {
+    "input": {
+      "title": "Input",
+      "type": "object",
+      "fa_icon": "fas fa-arrow-right",
+      "required": [
+        "platform",
+        "input",
+        "sample_sheet"
+      ],
+      "properties": {
+        "platform": {
+          "title": "Platform",
+          "type": "string",
+          "default": "illumina",
+          "enum": [
+            "illumina",
+            "ont"
+          ],
+          "description": "illumina: reads hold the index in their names or in I1/I2 files. ont: barcodes are searched for at both ends of each read."
+        },
+        "input": {
+          "title": "Reads",
+          "type": "string",
+          "format": "directory-path",
+          "description": "Folder containing the FASTQ files to sort (for Illumina, for example Undetermined_S0_L001_R1_001.fastq.gz; for Nanopore, for example fastq_pass). Sub-folders are searched too."
+        },
+        "sample_sheet": {
+          "title": "Sample sheet",
+          "type": "string",
+          "format": "file-path",
+          "description": "Illumina: SampleSheet.csv, or a CSV with sample,index,index2. Nanopore: a CSV or XLSX with sample,start,end (end is optional)."
+        }
+      }
+    },
+    "illumina": {
+      "title": "Illumina options",
+      "type": "object",
+      "fa_icon": "fas fa-sliders-h",
+      "properties": {
+        "mismatches": {
+          "title": "Mismatches per index",
+          "type": "integer",
+          "default": 1,
+          "enum": [
+            0,
+            1,
+            2
+          ],
+          "description": "Differences allowed in each index. The sample sheet is refused if two samples could be confused at this setting."
+        },
+        "i5_direction": {
+          "title": "Direction of index 2",
+          "type": "string",
+          "default": "auto",
+          "enum": [
+            "auto",
+            "forward",
+            "rc"
+          ],
+          "description": "auto detects it from the reads. forward = as written in the sheet; rc = reverse complement."
+        }
+      }
+    },
+    "nanopore": {
+      "title": "Nanopore options",
+      "type": "object",
+      "fa_icon": "fas fa-sliders-h",
+      "properties": {
+        "max_error": {
+          "title": "Maximum error",
+          "type": "number",
+          "default": 0.2,
+          "description": "Largest edit distance accepted, as a fraction of the barcode sequence length."
+        },
+        "min_margin": {
+          "title": "Minimum margin",
+          "type": "integer",
+          "default": 3,
+          "description": "The best barcode must be at least this many edits closer than the second best."
+        },
+        "search_window": {
+          "title": "Search window",
+          "type": "integer",
+          "default": 150,
+          "description": "Bases searched at each end of the read."
+        },
+        "min_length": {
+          "title": "Minimum length",
+          "type": "integer",
+          "default": 50,
+          "description": "Shortest read kept after trimming."
+        },
+        "max_length": {
+          "title": "Maximum length",
+          "type": "integer",
+          "default": 0,
+          "description": "Longest read kept; 0 means no limit."
+        },
+        "require_both_ends": {
+          "title": "Require both ends",
+          "type": "boolean",
+          "default": false,
+          "description": "Assign only reads with the barcode at both ends."
+        }
+      }
+    },
+    "output": {
+      "title": "Resources",
+      "type": "object",
+      "fa_icon": "fas fa-microchip",
+      "properties": {
+        "threads": {
+          "title": "CPU threads",
+          "type": "integer",
+          "default": 8,
+          "description": "Threads to use."
+        }
+      }
+    },
+    "misc": {
+      "title": "Miscellaneous",
+      "type": "object",
+      "properties": {
+        "disable_ping": {
+          "type": "boolean",
+          "default": true,
+          "hidden": true,
+          "description": "Not used."
+        },
+        "help": {
+          "type": "boolean",
+          "default": false,
+          "hidden": true,
+          "description": "Not used."
+        },
+        "version": {
+          "type": "boolean",
+          "default": false,
+          "hidden": true,
+          "description": "Not used."
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "$ref": "#/definitions/input"
+    },
+    {
+      "$ref": "#/definitions/illumina"
+    },
+    {
+      "$ref": "#/definitions/nanopore"
+    },
+    {
+      "$ref": "#/definitions/output"
+    },
+    {
+      "$ref": "#/definitions/misc"
+    }
+  ]
+}
