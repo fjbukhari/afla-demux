@@ -266,14 +266,15 @@ def conclusions(rows, polyt, cnv, gaps, cftr2_given, primers_clipped, platform):
                      "Amplicons cannot join exon 4 and intron 9, so cis/trans needs parental samples.")
     if polyt.get("notes"):
         notes.extend(polyt["notes"])
-    if not rep and not (cnv or {}).get("calls"):
+    if cftr2_given and not rep and not (cnv or {}).get("calls"):
         where = "in the regions adequately covered" if gaps else "in the targeted regions"
         notes.append(f"No CF-causing, varying-consequence or uninterpreted CFTR2 variant was detected {where}. "
                      "This lowers but does not remove the chance of carrying a CFTR variant.")
     if gaps:
         notes.append(f"{len(gaps)} target(s) below full coverage (listed in red): a variant there could be missed.")
     if not cftr2_given:
-        notes.append("CFTR2 list not supplied: variants could not be classified by CFTR2.")
+        notes.append("CFTR2 list not supplied: variants could not be classified by CFTR2, so this report cannot say whether "
+                     "CF-causing variants are present. Review every variant listed under 'Other variants'.")
     if not primers_clipped:
         notes.append("Primer positions were not supplied, so primer bases were not removed: a real variant under a "
                      "primer can be hidden or under-counted.")
