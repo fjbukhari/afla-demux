@@ -100,7 +100,9 @@ def load_cftr2(path, fasta):
         rec = {"cdna": str(cdna).strip(), "legacy": str(_cell(r, lg) or "").strip(),
                "protein": str(_cell(r, pr) or "").strip(), "alleles": _cell(r, al),
                "determination": str(_cell(r, det)).strip()}
-        by_c[rec["cdna"]] = rec
+        # some rows give two cDNA names in one cell ("c.3845G>A|c.3846G>A" for W1282X): register each
+        for name in [rec["cdna"]] + [x.strip() for x in rec["cdna"].split("|") if x.strip()]:
+            by_c.setdefault(name, rec)
         by_legacy[rec["legacy"]] = rec
     h, cols = _header(coords, "Variant cDNA name")
     pos_i, ref_i, alt_i = (cols.index("grch38_" + k) for k in ("pos", "ref", "alt"))
@@ -229,6 +231,73 @@ def classify(var, tx, fasta, by_pos):
             "clinvar": clinvar or "-", "consequence": (csq.get("Consequence") or "").replace("_", " ").replace("&", ", "),
             "filter": var["filter"], "pos": var["pos"], "ref": var["ref"], "alt": var["alt"], "tier": tier,
             "gt": var.get("gt", ""), "ps": var.get("ps", "")}
+
+
+def merge_known(calls, fasta, by_pos):
+    """Callers can split one CFTR allele into two records (2183AA>G, c.2051_2052delinsG, comes out as c.2052del plus
+    c.2052A>G, the deletion left-aligned to the start of the A run). Two heterozygous calls within 20 bases with similar
+    VAF are joined only when the joined allele, with the indel at any of its equivalent positions in a repeat, is a
+    CFTR2 variant at that exact GRCh38 position; otherwise the calls are left as they are."""
+    def core(v):                                   # minimal change: (pos, removed, inserted)
+        p, r, t = v["pos"], v["ref"].upper(), v["alt"].upper()
+        while r and t and r[0] == t[0]:
+            p, r, t = p + 1, r[1:], t[1:]
+        while r and t and r[-1] == t[-1]:
+            r, t = r[:-1], t[:-1]
+        return p, r, t
+
+    def shifts(c):                                 # an indel slides right through a repeat without changing the allele
+        out = [c]
+        p, r, t = c
+        if r and not t:                            # deletion
+            while len(out) < 50 and fasta.fetch(hg.CHROM, p + len(r), p + len(r)).upper() == r[0]:
+                r = r[1:] + r[0]; p += 1; out.append((p, r, t))
+        elif t and not r:                          # insertion before position p
+            while len(out) < 50 and fasta.fetch(hg.CHROM, p, p).upper() == t[0]:
+                t = t[1:] + t[0]; p += 1; out.append((p, r, t))
+        return out
+
+    def join(e1, e2):
+        e1, e2 = sorted((e1, e2))
+        if e2[0] < e1[0] + len(e1[1]) or (not e1[1] and e2[0] == e1[0]):
+            return None
+        start = e1[0] - 1
+        end = max(e1[0] + len(e1[1]), e2[0] + len(e2[1])) - 1
+        ref = fasta.fetch(hg.CHROM, start, end).upper()
+        seq = list(ref)
+        for p0, r0, t0 in (e2, e1):                # right to left keeps indices valid
+            k = p0 - start
+            seq[k:k + len(r0)] = list(t0)
+        return hg.left_align(fasta, start, ref, "".join(seq)), start, ref, "".join(seq)
+
+    out, used = [], set()
+    for i, x in enumerate(calls):
+        if i in used:
+            continue
+        hit = None
+        for j in range(i + 1, len(calls)):
+            y = calls[j]
+            if j in used or abs(y["pos"] - x["pos"]) > 20 or x["zygosity"] != "het" or y["zygosity"] != "het":
+                continue
+            if x["vaf"] is None or y["vaf"] is None or abs(x["vaf"] - y["vaf"]) > 0.15:
+                continue
+            for c1 in shifts(core(x)):
+                for c2 in shifts(core(y)):
+                    r = join(c1, c2)
+                    if r and r[0] in by_pos:
+                        hit = (j, r); break
+                if hit: break
+            if hit: break
+        if hit:
+            j, (key, start, ref, alt) = hit
+            y = calls[j]
+            out.append(dict(x, pos=key[0], ref=key[1], alt=key[2], key=key, vaf=min(x["vaf"], y["vaf"]),
+                            filter=x["filter"] if x["filter"] == y["filter"] else f"{x['filter']};{y['filter']}", csq={},
+                            merged=f"joined from {x['pos']}{x['ref']}>{x['alt']} and {y['pos']}{y['ref']}>{y['alt']}"))
+            used.update((i, j))
+        else:
+            out.append(x)
+    return out
 
 
 def hg_name_safe(tx, fasta, var):
@@ -391,7 +460,7 @@ def main(argv=None):
     fasta = hg.Fasta(a.fasta)
     has_cftr2 = bool(a.cftr2) and not Path(a.cftr2).name.startswith("NO_")
     by_pos, by_legacy, cftr2_date = load_cftr2(a.cftr2, fasta) if has_cftr2 else ({}, {}, "")
-    variants = [classify(v, tx, fasta, by_pos) for v in read_vcf(a.vcf, fasta)]
+    variants = [classify(v, tx, fasta, by_pos) for v in merge_known(read_vcf(a.vcf, fasta), fasta, by_pos)]
     order = {CF_CAUSING: 0, VCC: 1, NO_INTERP: 2}
     variants.sort(key=lambda r: (r["tier"] != "report", order.get(r["cftr2"], 3), r["pos"]))
     polyt = json.loads(Path(a.polyt).read_text())
